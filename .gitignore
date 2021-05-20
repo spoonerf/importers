@@ -7,3 +7,5 @@ __pycache__/
 
 /un_sdg/input
 .vscode/launch.json
+.Rproj.user
+*.Rproj

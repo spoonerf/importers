@@ -10,6 +10,7 @@ DATASET_NAMESPACE = f"{DATASET_DIR.split('/')[-1]}@{DATASET_VERSION}"
 CONFIGPATH = os.path.join(DATASET_DIR, 'config')
 INPATH = os.path.join(DATASET_DIR, 'input')
 OUTPATH = os.path.join(DATASET_DIR, 'output')
+DATAPATH = os.path.join(OUTPATH, 'datapoints')
 INFILE = os.path.join(INPATH, 'un-sdg-' + DATASET_VERSION + '.csv')
 ENTFILE =  os.path.join(INPATH, 'entities-' + DATASET_VERSION + '.csv')
 METAPATH = os.path.join(DATASET_DIR, 'metadata')
