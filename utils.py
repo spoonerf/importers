@@ -4,6 +4,7 @@ import pdfminer.high_level
 import pdfminer.layout
 from typing import Iterable, Any, Generator
 
+
 def write_file(file_path, content):
     with open(file_path, 'w') as f:
         f.write(content)
@@ -79,3 +80,5 @@ def extract_description(pdf_path):
     converted_text = ff.getvalue()
 
     return converted_text
+
+

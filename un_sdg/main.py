@@ -14,7 +14,6 @@ from standard_importer import import_dataset, upsert_suggested_chart_revisions
 
 def main():
     download.main()
-    init_variables_to_upsert.main()
     clean.main()
     import_dataset.main(DATASET_DIR, DATASET_NAMESPACE)
 

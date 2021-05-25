@@ -12,11 +12,10 @@ import pdfminer.high_level
 import pdfminer.layout
 import lxml.html
 
-
 from pathlib import Path
 from tqdm import tqdm
 from typing import List, Tuple, Dict
-from utils import str_to_float, extract_description, clean_datasets
+from utils import str_to_float, extract_description
 
 #from db import connection
 #from db_utils import DBUtils
@@ -27,21 +26,10 @@ from un_sdg import (
     DATASET_NAME,
     DATASET_AUTHORS,
     DATASET_VERSION,
-    DATASET_LINK,
-    DATASET_RETRIEVED_DATE,
-    CONFIGPATH,
-    INPATH,
     OUTPATH,
     METAPATH
 )
-# Get entities from the dataset 
 
-#df_entities = pd.read_csv(INFILE, low_memory = False)
-#assert not df_entities['GeoAreaName'].duplicated().any()
-#df_entities[['GeoAreaName']].drop_duplicates() \
-#                                       .dropna() \
-#                                        .rename(columns={'GeoAreaName': 'Country'}) \
-#                                        .to_csv(ENTFILE, index=False)
 """
 Now use the country standardiser tool to standardise $ENTFILE
 1. Open the OWID Country Standardizer Tool
@@ -69,130 +57,109 @@ MAX_SOURCE_NAME_LEN = 256
 # Make the datapoints folder
 Path(DATAPATH).mkdir(parents=True, exist_ok=True)
 
-# Load and clean the data 
-original_df = pd.read_csv(
-    INFILE, 
-    converters={'Value': str_to_float},
-    low_memory=False
-)
-original_df = original_df[original_df['Value'].notnull()]
 
-original_df[['GeoAreaName']].drop_duplicates() \
-                                       .dropna() \
-                                        .rename(columns={'GeoAreaName': 'Country'}) \
-                                        .to_csv(ENTFILE, index=False)
-
-DIMENSIONS = [c for c in original_df.columns if c[0] == '[' and c[-1] == ']']
-
-### Start main() here
+def load_and_clean():
+    # Load and clean the data 
+    original_df = pd.read_csv(
+        INFILE, 
+        converters={'Value': str_to_float},
+        low_memory=False
+    )
+    original_df = original_df[original_df['Value'].notnull()]
+    original_df[['GeoAreaName']].drop_duplicates() \
+                                .dropna() \
+                                .rename(columns={'GeoAreaName': 'Country'}) \
+                                .to_csv(ENTFILE, index=False)
+    return original_df
 
 ### Datasets
-
-df_datasets = clean_datasets()
-assert df_datasets.shape[0] == 1, f"Only expected one dataset in {os.path.join(OUTPATH, 'datasets.csv')}."
-df_datasets.to_csv(os.path.join(OUTPATH, 'datasets.csv'), index=False)
+def create_datasets():
+    df_datasets = clean_datasets()
+    assert df_datasets.shape[0] == 1, f"Only expected one dataset in {os.path.join(OUTPATH, 'datasets.csv')}."
+    df_datasets.to_csv(os.path.join(OUTPATH, 'datasets.csv'), index=False)
+    return df_datasets
 
 ### Sources
 
-df_sources = pd.DataFrame(columns=['id', 'name', 'description', 'dataset_id'])
-
-source_description_template = {
-    'dataPublishedBy': "United Nations Statistics Division",
-    'dataPublisherSource': None,
-    'link': "https://unstats.un.org/sdgs/indicators/database/",
-    'retrievedDate': datetime.now().strftime("%d-%B-%y"),
-    'additionalInfo': None
-}
-
-all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]'])   .count()   .reset_index()
-
-all_series = original_df[['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]'])   .count()   .reset_index()
-
-
-df_sources = pd.DataFrame(columns=['id', 'name', 'description', 'dataset_id'])
-
-source_description = source_description_template.copy()
-
-for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
+def create_sources(original_df, df_datasets):
+    df_sources = pd.DataFrame(columns=['id', 'name', 'description', 'dataset_id'])
+    source_description_template = {
+        'dataPublishedBy': "United Nations Statistics Division",
+        'dataPublisherSource': None,
+        'link': "https://unstats.un.org/sdgs/indicators/database/",
+        'retrievedDate': datetime.now().strftime("%d-%B-%y"),
+        'additionalInfo': None
+    }
+    all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]'])   .count()   .reset_index()
+    #all_series = original_df[['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]'])   .count()   .reset_index()
+    source_description = source_description_template.copy()
+    for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
    # print(row['Indicator'])   
-    try:
-        source_description['additionalInfo'] = extract_description(os.path.join(METAPATH,'Metadata-%s.pdf') % '-'.join([part.rjust(2, '0') for part in row['Indicator'].split('.')]))
-        print(source_description['additionalInfo'])
-    except:
-        pass
-    df_sources = df_sources.append({
-        'id': i,
-        #'name': "%s (UN SDG, 2021)" % row['Source'],
-        'name': "%s (UN SDG, 2021)" % row['SeriesDescription'],
-        'description': json.dumps(source_description),
-        'dataset_id': df_datasets['id'] # this may need to be more flexible! 
-    }, ignore_index=True)
-
-df_sources.to_csv(os.path.join(OUTPATH, 'sources.csv'), index=False)
+        try:
+            source_description['additionalInfo'] = extract_description(os.path.join(METAPATH,'Metadata-%s.pdf') % '-'.join([part.rjust(2, '0') for part in row['Indicator'].split('.')]))
+            print(source_description['additionalInfo'])
+        except:
+            pass
+        df_sources = df_sources.append({
+            'id': i,
+            #'name': "%s (UN SDG, 2021)" % row['Source'],
+            'name': "%s (UN SDG, 2021)" % row['SeriesDescription'],
+            'description': json.dumps(source_description),
+            'dataset_id': df_datasets['id'] # this may need to be more flexible! 
+        }, ignore_index=True)
+    df_sources.to_csv(os.path.join(OUTPATH, 'sources.csv'), index=False)
 
 ### Variables
 
-variable_codes = original_df['SeriesCode'].drop_duplicates()
+def create_variables_datapoints(original_df):
+    variable_idx = 0
+    variables = pd.DataFrame(columns=['id', 'name', 'unit', 'dataset_id'])
 
-variable_codes = {
-    'id': 0,
-    'dataset_id': 0,
-    'unit': original_df['[Units]']
-}
-
-entity2owid_name = pd.read_csv(os.path.join(OUTPATH, 'standardized_entity_names.csv')) \
+    entity2owid_name = pd.read_csv(os.path.join(OUTPATH, 'standardized_entity_names.csv')) \
                               .set_index('country_code') \
                               .squeeze() \
                               .to_dict()
 
-original_df['country'] = original_df['GeoAreaName'].apply(lambda x: entity2owid_name[x])
-
-variable_codes = original_df['SeriesCode'].drop_duplicates()
-
-NON_DIMENSIONS = [c for c in original_df.columns if c not in set(DIMENSIONS)]# not sure if units should be in here
-
-variable_idx = 0
-variables = pd.DataFrame(columns=['id', 'name', 'unit', 'dataset_id'])
-
-for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
-    _, dimensions, dimension_members = get_series_with_relevant_dimensions(row['Indicator'], row['SeriesCode'])
-    if len(dimensions) == 0:
-        # no additional dimensions
-        table = generate_tables_for_indicator_and_series(row['Indicator'], row['SeriesCode'])
-        variable = {
-            'id': variable_idx,
-            'dataset_id': i,
-            'unit': row['[Units]'],
-            'name': "%s - %s - %s" % (row['Indicator'], row['SeriesDescription'], row['SeriesCode'])
-        }
-        variables = variables.append(variable, ignore_index=True)
-        extract_datapoints(table).to_csv(os.path.join(DATAPATH,'datapoints_%d.csv' % variable_idx), index=False)
-        variable_idx += 1
-    else:
-        # has additional dimensions
-        for member_combination, table in generate_tables_for_indicator_and_series(row['Indicator'], row['SeriesCode']).items():
+    original_df['country'] = original_df['GeoAreaName'].apply(lambda x: entity2owid_name[x])
+    DIMENSIONS = tuple([c for c in original_df.columns if c[0] == '[' and c[-1] == ']'])
+    NON_DIMENSIONS = tuple([c for c in original_df.columns if c not in set(DIMENSIONS)])# not sure if units should be in here
+    all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]'])   .count()   .reset_index()
+    
+    for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
+        _, dimensions, dimension_members = get_series_with_relevant_dimensions(row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
+        if len(dimensions) == 0:
+            # no additional dimensions
+            table = generate_tables_for_indicator_and_series(row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
             variable = {
                 'id': variable_idx,
                 'dataset_id': i,
                 'unit': row['[Units]'],
-                'name': "%s - %s - %s - %s" % (
-                    row['Indicator'], 
-                    row['SeriesDescription'], 
-                    row['SeriesCode'],
-                    ' - '.join(map(str, member_combination)))
-                
+                'name': "%s - %s - %s" % (row['Indicator'], row['SeriesDescription'], row['SeriesCode'])
             }
             variables = variables.append(variable, ignore_index=True)
             extract_datapoints(table).to_csv(os.path.join(DATAPATH,'datapoints_%d.csv' % variable_idx), index=False)
             variable_idx += 1
+        else:
+        # has additional dimensions
+            for member_combination, table in generate_tables_for_indicator_and_series(row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS).items():
+                variable = {
+                    'id': variable_idx,
+                    'dataset_id': i,
+                    'unit': row['[Units]'],
+                    'name': "%s - %s - %s - %s" % (
+                        row['Indicator'], 
+                        row['SeriesDescription'], 
+                        row['SeriesCode'],
+                        ' - '.join(map(str, member_combination)))                
+                }
+                variables = variables.append(variable, ignore_index=True)
+                extract_datapoints(table).to_csv(os.path.join(DATAPATH,'datapoints_%d.csv' % variable_idx), index=False)
+                variable_idx += 1
+    variables.to_csv(os.path.join(OUTPATH,'variables.csv'), index=False)
 
-variables.to_csv(os.path.join(OUTPATH,'variables.csv'), index=False)
-
-
-
-df_distinct_entities = pd.DataFrame(get_distinct_entities(), columns=['name']) # Goes through each datapoints to get the distinct entities
-
-df_distinct_entities.to_csv(os.path.join(OUTPATH, 'distinct_countries_standardized.csv'), index=False)
+def create_distinct_entities(): 
+    df_distinct_entities = pd.DataFrame(get_distinct_entities(), columns=['name']) # Goes through each datapoints to get the distinct entities
+    df_distinct_entities.to_csv(os.path.join(OUTPATH, 'distinct_countries_standardized.csv'), index=False)
 
 #### Helper functions: 
 
@@ -205,7 +172,7 @@ def delete_output(keep_paths: List[str]) -> None:
                     os.remove(CleanUp)
 
 @functools.lru_cache(maxsize=256)
-def get_series_with_relevant_dimensions(indicator, series):
+def get_series_with_relevant_dimensions(indicator, series, DIMENSIONS, NON_DIMENSIONS):
     """ For a given indicator and series, return a tuple:
     
       - data filtered to that indicator and series
@@ -223,12 +190,12 @@ def get_series_with_relevant_dimensions(indicator, series):
         if len(uniques) > 1: # Means that columns where the value doesn't change aren't included e.g. Nature is typically consistent across a dimension whereas Age and Sex are less likely to be. 
             dimension_names.append(c)
             dimension_unique_values.append(list(uniques))
-    return (data_filtered[NON_DIMENSIONS + dimension_names], dimension_names, dimension_unique_values)
+    return (data_filtered[data_filtered.columns.intersection(list(NON_DIMENSIONS)+ list(dimension_names))], dimension_names, dimension_unique_values)
 
 @functools.lru_cache(maxsize=256)
-def generate_tables_for_indicator_and_series(indicator, series):
+def generate_tables_for_indicator_and_series(indicator, series, DIMENSIONS, NON_DIMENSIONS):
     tables_by_combination = {}
-    data_filtered, dimensions, dimension_values = get_series_with_relevant_dimensions(indicator, series)
+    data_filtered, dimensions, dimension_values = get_series_with_relevant_dimensions(indicator, series, DIMENSIONS, NON_DIMENSIONS)
     if len(dimensions) == 0:
         # no additional dimensions
         export = data_filtered
@@ -271,6 +238,31 @@ def get_distinct_entities() -> List[str]:
         "`clean_and_create_datapoints()`."
     )
     return entities
+
+def clean_datasets() -> pd.DataFrame:
+    """Constructs a dataframe where each row represents a dataset to be
+    upserted.
+    Note: often, this dataframe will only consist of a single row.
+    
+    Returns:
+        df: pd.DataFrame. Dataframe where each row represents a dataset to be 
+            upserted. Example:
+            id                                               name
+        0   0  Global Health Observatory - World Health Organ...
+    """
+    data = [
+        {"id": 0, "name": f"{DATASET_NAME} - {DATASET_AUTHORS} ({DATASET_VERSION})"}
+    ]
+    df = pd.DataFrame(data)
+    return df
+
+def main():
+    original_df = load_and_clean()
+    df_datasets = create_datasets()
+    create_sources(original_df, df_datasets)
+    create_variables_datapoints(original_df)
+    create_distinct_entities()
+
 
 if __name__ == '__main__':
     main()
