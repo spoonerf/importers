@@ -79,8 +79,8 @@ def create_sources(original_df, df_datasets):
         'retrievedDate': datetime.now().strftime("%d-%B-%y"),
         'additionalInfo': None
     }
-    all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]'])   .count()   .reset_index()
-    #all_series = original_df[['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]'])   .count()   .reset_index()
+    #all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]'])   .count()   .reset_index()
+    all_series = original_df[['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]'])   .count()   .reset_index()
     source_description = source_description_template.copy()
     for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
    # print(row['Indicator'])   
@@ -115,10 +115,11 @@ def create_variables_datapoints(original_df):
     all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]'])   .count()   .reset_index()
     
     for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
-        _, dimensions, dimension_members = get_series_with_relevant_dimensions(row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
+        data_filtered =  original_df[(original_df.Indicator == row['Indicator']) & (original_df.SeriesCode == row['SeriesCode'])]
+        _, dimensions, dimension_members = get_series_with_relevant_dimensions(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
         if len(dimensions) == 0:
             # no additional dimensions
-            table = generate_tables_for_indicator_and_series(row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
+            table = generate_tables_for_indicator_and_series(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
             variable = {
                 'id': variable_idx,
                 'dataset_id': i,
@@ -130,7 +131,7 @@ def create_variables_datapoints(original_df):
             variable_idx += 1
         else:
         # has additional dimensions
-            for member_combination, table in generate_tables_for_indicator_and_series(row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS).items():
+            for member_combination, table in generate_tables_for_indicator_and_series(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS).items():
                 variable = {
                     'id': variable_idx,
                     'dataset_id': i,
@@ -161,14 +162,14 @@ def delete_output(keep_paths: List[str]) -> None:
                     os.remove(CleanUp)
 
 @functools.lru_cache(maxsize=256)
-def get_series_with_relevant_dimensions(indicator, series, DIMENSIONS, NON_DIMENSIONS):
+def get_series_with_relevant_dimensions(data_filtered,indicator, series, DIMENSIONS, NON_DIMENSIONS):
     """ For a given indicator and series, return a tuple:
     
       - data filtered to that indicator and series
       - names of relevant dimensions
       - unique values for each relevant dimension
     """
-    data_filtered = original_df[(original_df.Indicator == indicator) & (original_df.SeriesCode == series)]
+   # data_filtered = original_df[(original_df.Indicator == indicator) & (original_df.SeriesCode == series)]
     non_null_dimensions_columns = [col for col in DIMENSIONS if data_filtered.loc[:, col].notna().any()]
     dimension_names = []
     dimension_unique_values = []
@@ -182,9 +183,9 @@ def get_series_with_relevant_dimensions(indicator, series, DIMENSIONS, NON_DIMEN
     return (data_filtered[data_filtered.columns.intersection(list(NON_DIMENSIONS)+ list(dimension_names))], dimension_names, dimension_unique_values)
 
 @functools.lru_cache(maxsize=256)
-def generate_tables_for_indicator_and_series(indicator, series, DIMENSIONS, NON_DIMENSIONS):
+def generate_tables_for_indicator_and_series(data_filtered, indicator, series, DIMENSIONS, NON_DIMENSIONS):
     tables_by_combination = {}
-    data_filtered, dimensions, dimension_values = get_series_with_relevant_dimensions(indicator, series, DIMENSIONS, NON_DIMENSIONS)
+    data_filtered, dimensions, dimension_values = get_series_with_relevant_dimensions(data_filtered, indicator, series, DIMENSIONS, NON_DIMENSIONS)
     if len(dimensions) == 0:
         # no additional dimensions
         export = data_filtered
@@ -256,10 +257,10 @@ MAX_SOURCE_NAME_LEN = 256
 Path('datapoints').mkdir(parents=True, exist_ok=True)
 
 def main():
-    original_df = load_and_clean()
+    original_df = load_and_clean() # Need to not delete - distinct_countries_standardized.csv
     df_datasets = create_datasets()
     create_sources(original_df, df_datasets)
-    create_variables_datapoints(original_df)
+    create_variables_datapoints(original_df) #numexpr can't be installed for this function to work - need to formalise this somehow
     create_distinct_entities()
 
 

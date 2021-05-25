@@ -6,7 +6,8 @@ __pycache__/
 .vscode/settings.json
 
 /un_sdg/input
-/un_sdg/output
+/un_sdg/output/
+/un_sdg/output/datapoints
 .vscode/launch.json
 .Rproj.user
 *.Rproj
