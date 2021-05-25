@@ -3,7 +3,7 @@ Usage:
     python -m un_sdg.main
 """
 
-from un_sdg import DATASET_NAMESPACE, DATASET_DIR, OUTPATH
+from un_sdg import DATASET_NAMESPACE, DATASET_DIR,  DATA_PATH, DATASET_VERSION, USER_ID
 
 from un_sdg import (
     download, 
@@ -15,7 +15,7 @@ from standard_importer import import_dataset, upsert_suggested_chart_revisions
 def main():
     download.main()
     clean.main()
-    import_dataset.main(DATASET_DIR, DATASET_NAMESPACE)
+    import_dataset.main(DATASET_DIR, DATA_PATH, DATASET_VERSION, USER_ID)
 
     match_variables.main()
     prepare_chart_updates.main()

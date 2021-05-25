@@ -20,13 +20,12 @@ from utils import str_to_float, extract_description
 #from db import connection
 #from db_utils import DBUtils
 from un_sdg import (
-    DATAPATH,
     INFILE,
     ENTFILE,
     DATASET_NAME,
     DATASET_AUTHORS,
     DATASET_VERSION,
-    OUTPATH,
+    DATA_PATH,
     METAPATH
 )
 
@@ -48,16 +47,6 @@ Now use the country standardiser tool to standardise $ENTFILE
 """
 
 
-KEEP_PATHS = ['standardized_entity_names.csv']
-#delete_output(KEEP_PATHS)
-
-# Max length of source name.
-MAX_SOURCE_NAME_LEN = 256
-
-# Make the datapoints folder
-Path(DATAPATH).mkdir(parents=True, exist_ok=True)
-
-
 def load_and_clean():
     # Load and clean the data 
     original_df = pd.read_csv(
@@ -75,8 +64,8 @@ def load_and_clean():
 ### Datasets
 def create_datasets():
     df_datasets = clean_datasets()
-    assert df_datasets.shape[0] == 1, f"Only expected one dataset in {os.path.join(OUTPATH, 'datasets.csv')}."
-    df_datasets.to_csv(os.path.join(OUTPATH, 'datasets.csv'), index=False)
+    assert df_datasets.shape[0] == 1, f"Only expected one dataset in {os.path.join(DATA_PATH, 'datasets.csv')}."
+    df_datasets.to_csv(os.path.join(DATA_PATH, 'datasets.csv'), index=False)
     return df_datasets
 
 ### Sources
@@ -107,7 +96,7 @@ def create_sources(original_df, df_datasets):
             'description': json.dumps(source_description),
             'dataset_id': df_datasets['id'] # this may need to be more flexible! 
         }, ignore_index=True)
-    df_sources.to_csv(os.path.join(OUTPATH, 'sources.csv'), index=False)
+    df_sources.to_csv(os.path.join(DATA_PATH, 'sources.csv'), index=False)
 
 ### Variables
 
@@ -115,7 +104,7 @@ def create_variables_datapoints(original_df):
     variable_idx = 0
     variables = pd.DataFrame(columns=['id', 'name', 'unit', 'dataset_id'])
 
-    entity2owid_name = pd.read_csv(os.path.join(OUTPATH, 'standardized_entity_names.csv')) \
+    entity2owid_name = pd.read_csv(os.path.join(DATA_PATH, 'standardized_entity_names.csv')) \
                               .set_index('country_code') \
                               .squeeze() \
                               .to_dict()
@@ -137,7 +126,7 @@ def create_variables_datapoints(original_df):
                 'name': "%s - %s - %s" % (row['Indicator'], row['SeriesDescription'], row['SeriesCode'])
             }
             variables = variables.append(variable, ignore_index=True)
-            extract_datapoints(table).to_csv(os.path.join(DATAPATH,'datapoints_%d.csv' % variable_idx), index=False)
+            extract_datapoints(table).to_csv(os.path.join('datapoints','datapoints_%d.csv' % variable_idx), index=False)
             variable_idx += 1
         else:
         # has additional dimensions
@@ -153,21 +142,21 @@ def create_variables_datapoints(original_df):
                         ' - '.join(map(str, member_combination)))                
                 }
                 variables = variables.append(variable, ignore_index=True)
-                extract_datapoints(table).to_csv(os.path.join(DATAPATH,'datapoints_%d.csv' % variable_idx), index=False)
+                extract_datapoints(table).to_csv(os.path.join('datapoints','datapoints_%d.csv' % variable_idx), index=False)
                 variable_idx += 1
-    variables.to_csv(os.path.join(OUTPATH,'variables.csv'), index=False)
+    variables.to_csv(os.path.join(DATA_PATH,'variables.csv'), index=False)
 
 def create_distinct_entities(): 
     df_distinct_entities = pd.DataFrame(get_distinct_entities(), columns=['name']) # Goes through each datapoints to get the distinct entities
-    df_distinct_entities.to_csv(os.path.join(OUTPATH, 'distinct_countries_standardized.csv'), index=False)
+    df_distinct_entities.to_csv(os.path.join(DATA_PATH, 'distinct_countries_standardized.csv'), index=False)
 
 #### Helper functions: 
 
 ## Not sure how well this works when the list is longer than one
 def delete_output(keep_paths: List[str]) -> None:
     for path in keep_paths:
-        if os.path.exists(os.path.join(OUTPATH, path)):
-            for CleanUp in glob.glob(os.path.join(OUTPATH, '*.*')):
+        if os.path.exists(os.path.join(DATA_PATH, path)):
+            for CleanUp in glob.glob(os.path.join(DATA_PATH, '*.*')):
                 if not CleanUp.endswith(path):    
                     os.remove(CleanUp)
 
@@ -226,10 +215,10 @@ def get_distinct_entities() -> List[str]:
     Returns:
         entities: List[str]. List of distinct entity names.
     """
-    fnames = [fname for fname in os.listdir(os.path.join(OUTPATH, 'datapoints')) if fname.endswith('.csv')]
+    fnames = [fname for fname in os.listdir(os.path.join(DATA_PATH, 'datapoints')) if fname.endswith('.csv')]
     entities = set({})
     for fname in fnames:
-        df_temp = pd.read_csv(os.path.join(OUTPATH, 'datapoints', fname))
+        df_temp = pd.read_csv(os.path.join(DATA_PATH, 'datapoints', fname))
         entities.update(df_temp['country'].unique().tolist())
     
     entities = list(entities)
@@ -255,6 +244,16 @@ def clean_datasets() -> pd.DataFrame:
     ]
     df = pd.DataFrame(data)
     return df
+
+
+KEEP_PATHS = ['standardized_entity_names.csv']
+delete_output(KEEP_PATHS)
+
+# Max length of source name.
+MAX_SOURCE_NAME_LEN = 256
+
+# Make the datapoints folder
+Path('datapoints').mkdir(parents=True, exist_ok=True)
 
 def main():
     original_df = load_and_clean()

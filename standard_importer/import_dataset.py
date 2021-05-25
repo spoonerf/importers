@@ -25,17 +25,17 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-DATASET_DIR = "who_gho"
-DATASET_VERSION = import_from(DATASET_DIR, 'DATASET_VERSION')
+#DATASET_DIR = "who_gho"
+#DATASET_VERSION = import_from(DATASET_DIR, 'DATASET_VERSION')
 
-USER_ID = 46
+#USER_ID = 46
 
-CURRENT_DIR = os.path.dirname(__file__)
+#CURRENT_DIR = os.path.dirname(__file__)
 # CURRENT_DIR = os.path.join(os.getcwd(), 'standard_importer')
-DATA_PATH = os.path.join(CURRENT_DIR, f"../{DATASET_DIR}/output/")
+#DATA_PATH = os.path.join(CURRENT_DIR, f"../{DATASET_DIR}/output/")
 
 
-def main():
+def main(DATASET_DIR, DATA_PATH, DATASET_VERSION, USER_ID):
 
     with connection.cursor() as cursor:
         db = DBUtils(cursor)

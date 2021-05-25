@@ -1,4 +1,5 @@
 import os
+#from standard_importer.import_dataset import USER_ID
 # Dataset constants.
 DATASET_NAME = "United Nations Sustainable Development Goals Indicators"
 DATASET_AUTHORS = "United Nations"
@@ -9,10 +10,10 @@ DATASET_DIR = os.path.dirname(__file__)
 DATASET_NAMESPACE = f"{DATASET_DIR.split('/')[-1]}@{DATASET_VERSION}"
 CONFIGPATH = os.path.join(DATASET_DIR, 'config')
 INPATH = os.path.join(DATASET_DIR, 'input')
-OUTPATH = os.path.join(DATASET_DIR, 'output')
-DATAPATH = os.path.join(OUTPATH, 'datapoints')
+DATA_PATH = os.path.join(DATASET_DIR, 'output')
 INFILE = os.path.join(INPATH, 'un-sdg-' + DATASET_VERSION + '.csv')
 ENTFILE =  os.path.join(INPATH, 'entities-' + DATASET_VERSION + '.csv')
 METAPATH = os.path.join(DATASET_DIR, 'metadata')
 METADATA_LOC = 'https://unstats.un.org/sdgs/metadata/files/SDG-indicator-metadata.zip'
+USER_ID = 54
 # Should add commonly used vars in here e.g. UNITS = '[UNITS] ?
