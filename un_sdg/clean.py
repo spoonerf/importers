@@ -94,7 +94,7 @@ def create_sources(original_df, df_datasets):
             #'name': "%s (UN SDG, 2021)" % row['Source'],
             'name': "%s (UN SDG, 2021)" % row['SeriesDescription'],
             'description': json.dumps(source_description),
-            'dataset_id': df_datasets['id'] # this may need to be more flexible! 
+            'dataset_id': df_datasets[['id']] # this may need to be more flexible! 
         }, ignore_index=True)
     df_sources.to_csv(os.path.join(DATA_PATH, 'sources.csv'), index=False)
 
@@ -257,12 +257,11 @@ MAX_SOURCE_NAME_LEN = 256
 Path('datapoints').mkdir(parents=True, exist_ok=True)
 
 def main():
-    original_df = load_and_clean() # Need to not delete - distinct_countries_standardized.csv
+    original_df = load_and_clean() 
     df_datasets = create_datasets()
     create_sources(original_df, df_datasets)
     create_variables_datapoints(original_df) #numexpr can't be installed for this function to work - need to formalise this somehow
     create_distinct_entities()
-
 
 if __name__ == '__main__':
     main()

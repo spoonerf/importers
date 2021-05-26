@@ -2,7 +2,6 @@
 Usage:
     python -m un_sdg.main
 """
-
 from un_sdg import DATASET_NAMESPACE, DATASET_DIR,  DATA_PATH, DATASET_VERSION, USER_ID
 
 from un_sdg import (
@@ -10,16 +9,12 @@ from un_sdg import (
     clean
 )
 
-from standard_importer import import_dataset, upsert_suggested_chart_revisions
+from standard_importer import import_dataset
 
 def main():
     download.main()
     clean.main()
     import_dataset.main(DATASET_DIR, DATA_PATH, DATASET_VERSION, USER_ID)
-
-    match_variables.main()
-    prepare_chart_updates.main()
-    upsert_suggested_chart_revisions.main(DATASET_DIR)
 
 if __name__ == '__main__':
     main()
