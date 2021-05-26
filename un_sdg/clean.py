@@ -94,7 +94,7 @@ def create_sources(original_df, df_datasets):
             #'name': "%s (UN SDG, 2021)" % row['Source'],
             'name': "%s (UN SDG, 2021)" % row['SeriesDescription'],
             'description': json.dumps(source_description),
-            'dataset_id': df_datasets[['id']] # this may need to be more flexible! 
+            'dataset_id': df_datasets.iloc[0]['id'] # this may need to be more flexible! 
         }, ignore_index=True)
     df_sources.to_csv(os.path.join(DATA_PATH, 'sources.csv'), index=False)
 
@@ -102,7 +102,7 @@ def create_sources(original_df, df_datasets):
 
 def create_variables_datapoints(original_df):
     variable_idx = 0
-    variables = pd.DataFrame(columns=['id', 'name', 'unit', 'dataset_id'])
+    variables = pd.DataFrame(columns=['id', 'name', 'unit', 'dataset_id', 'source_id'])
 
     entity2owid_name = pd.read_csv(os.path.join(DATA_PATH, 'standardized_entity_names.csv')) \
                               .set_index('country_code') \
@@ -122,9 +122,10 @@ def create_variables_datapoints(original_df):
             table = generate_tables_for_indicator_and_series(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
             variable = {
                 'id': variable_idx,
-                'dataset_id': i,
                 'unit': row['[Units]'],
-                'name': "%s - %s - %s" % (row['Indicator'], row['SeriesDescription'], row['SeriesCode'])
+                'name': "%s - %s - %s" % (row['Indicator'], row['SeriesDescription'], row['SeriesCode']),
+                'dataset_id':,
+                'source_id': i
             }
             variables = variables.append(variable, ignore_index=True)
             extract_datapoints(table).to_csv(os.path.join('datapoints','datapoints_%d.csv' % variable_idx), index=False)
@@ -134,13 +135,14 @@ def create_variables_datapoints(original_df):
             for member_combination, table in generate_tables_for_indicator_and_series(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS).items():
                 variable = {
                     'id': variable_idx,
-                    'dataset_id': i,
                     'unit': row['[Units]'],
                     'name': "%s - %s - %s - %s" % (
                         row['Indicator'], 
                         row['SeriesDescription'], 
                         row['SeriesCode'],
-                        ' - '.join(map(str, member_combination)))                
+                        ' - '.join(map(str, member_combination))), 
+                    'source_id': i,
+                    'dataset_id':
                 }
                 variables = variables.append(variable, ignore_index=True)
                 extract_datapoints(table).to_csv(os.path.join('datapoints','datapoints_%d.csv' % variable_idx), index=False)
@@ -233,12 +235,6 @@ def clean_datasets() -> pd.DataFrame:
     """Constructs a dataframe where each row represents a dataset to be
     upserted.
     Note: often, this dataframe will only consist of a single row.
-    
-    Returns:
-        df: pd.DataFrame. Dataframe where each row represents a dataset to be 
-            upserted. Example:
-            id                                               name
-        0   0  Global Health Observatory - World Health Organ...
     """
     data = [
         {"id": 0, "name": f"{DATASET_NAME} - {DATASET_AUTHORS} ({DATASET_VERSION})"}
@@ -248,7 +244,7 @@ def clean_datasets() -> pd.DataFrame:
 
 
 KEEP_PATHS = ['standardized_entity_names.csv']
-delete_output(KEEP_PATHS)
+#delete_output(KEEP_PATHS)
 
 # Max length of source name.
 MAX_SOURCE_NAME_LEN = 256
