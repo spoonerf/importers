@@ -11,6 +11,7 @@ import math
 import pdfminer.high_level
 import pdfminer.layout
 import lxml.html
+import numpy as np
 
 from pathlib import Path
 from tqdm import tqdm
@@ -22,11 +23,15 @@ from utils import str_to_float, extract_description
 from un_sdg import (
     INFILE,
     ENTFILE,
-    DATASET_NAME,
-    DATASET_AUTHORS,
-    DATASET_VERSION,
     DATA_PATH,
-    METAPATH
+    delete_output,
+    get_series_with_relevant_dimensions,
+    generate_tables_for_indicator_and_series,
+    extract_datapoints,
+    get_distinct_entities,
+    clean_datasets,
+    dimensions_description,
+    attributes_description
 )
 
 """
@@ -80,12 +85,12 @@ def create_sources(original_df, df_datasets):
         'additionalInfo': None
     }
     #all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]'])   .count()   .reset_index()
-    all_series = original_df[['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'SeriesDescription', '[Units]'])   .count()   .reset_index()
+    all_series = original_df[['SeriesCode', 'SeriesDescription', '[Units]']]   .groupby(by=['SeriesCode', 'SeriesDescription', '[Units]'])   .count()   .reset_index()
     source_description = source_description_template.copy()
     for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
    # print(row['Indicator'])   
         try:
-            source_description['additionalInfo'] = extract_description(os.path.join(METAPATH,'Metadata-%s.pdf') % '-'.join([part.rjust(2, '0') for part in row['Indicator'].split('.')]))
+            source_description['additionalInfo'] = None
             print(source_description['additionalInfo'])
         except:
             pass
@@ -94,10 +99,11 @@ def create_sources(original_df, df_datasets):
             #'name': "%s (UN SDG, 2021)" % row['Source'],
             'name': "%s (UN SDG, 2021)" % row['SeriesDescription'],
             'description': json.dumps(source_description),
-            'dataset_id': df_datasets.iloc[0]['id'] # this may need to be more flexible! 
+            'dataset_id': df_datasets.iloc[0]['id'], # this may need to be more flexible! 
+            'series_code': row['SeriesCode']
         }, ignore_index=True)
     df_sources.to_csv(os.path.join(DATA_PATH, 'sources.csv'), index=False)
-
+    
 ### Variables
 
 def create_variables_datapoints(original_df):
@@ -109,23 +115,47 @@ def create_variables_datapoints(original_df):
                               .squeeze() \
                               .to_dict()
 
+    series2source_id = pd.read_csv(os.path.join(DATA_PATH, 'sources.csv'))\
+                            .drop(['name','description', 'dataset_id'], 1)\
+                            .set_index('series_code')\
+                            .squeeze() \
+                            .to_dict()
+
+    unit_description = attributes_description()
+
     original_df['country'] = original_df['GeoAreaName'].apply(lambda x: entity2owid_name[x])
+    original_df['Units'] = original_df['[Units]'].apply(lambda x: unit_description[x])
     DIMENSIONS = tuple([c for c in original_df.columns if c[0] == '[' and c[-1] == ']'])
     NON_DIMENSIONS = tuple([c for c in original_df.columns if c not in set(DIMENSIONS)])# not sure if units should be in here
-    all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]'])   .count()   .reset_index()
+    all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', 'Units']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', 'Units'])   .count()   .reset_index()
+    conditions = [
+        (all_series['Units'].str.contains("PERCENT")) | (all_series['Units'].str.contains("Percentage")),
+        (all_series['Units'].str.contains("KG")) | (all_series['Units'].str.contains("Kilograms")),
+        (all_series['Units'].str.contains("USD")) | (all_series['Units'].str.contains("usd"))]   
     
-    for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
+    choices = ["%", "kg", "$"]
+    
+    all_series['short_unit'] = np.select(conditions, choices, default = None)
+
+    for i, row in tqdm(all_series.iterrows(), total=len(all_series)): 
         data_filtered =  original_df[(original_df.Indicator == row['Indicator']) & (original_df.SeriesCode == row['SeriesCode'])]
         _, dimensions, dimension_members = get_series_with_relevant_dimensions(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
         if len(dimensions) == 0:
             # no additional dimensions
             table = generate_tables_for_indicator_and_series(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
             variable = {
+                'dataset_id': 0,
+                'source_id': series2source_id[row['SeriesCode']],
                 'id': variable_idx,
-                'unit': row['[Units]'],
                 'name': "%s - %s - %s" % (row['Indicator'], row['SeriesDescription'], row['SeriesCode']),
-                'dataset_id':,
-                'source_id': i
+                'description': None,
+                'code': row['SeriesCode'],
+                'unit': row['Units'],
+                'short_unit': row['short_unit'],
+                'timespan': "%s - %s" % (int(np.min(data_filtered['TimePeriod'])), int(np.max(data_filtered['TimePeriod']))),
+                'coverage': None,
+                'display': None,
+                'original_metadata': None
             }
             variables = variables.append(variable, ignore_index=True)
             extract_datapoints(table).to_csv(os.path.join('datapoints','datapoints_%d.csv' % variable_idx), index=False)
@@ -134,15 +164,22 @@ def create_variables_datapoints(original_df):
         # has additional dimensions
             for member_combination, table in generate_tables_for_indicator_and_series(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS).items():
                 variable = {
+                    'dataset_id': 0,
+                    'source_id': series2source_id[row['SeriesCode']],
                     'id': variable_idx,
-                    'unit': row['[Units]'],
                     'name': "%s - %s - %s - %s" % (
                         row['Indicator'], 
                         row['SeriesDescription'], 
                         row['SeriesCode'],
-                        ' - '.join(map(str, member_combination))), 
-                    'source_id': i,
-                    'dataset_id':
+                        ' - '.join(map(str, member_combination))),
+                    'description': None,
+                    'code': row['SeriesCode'],
+                    'unit': row['Units'],
+                    'short_unit': row['short_unit'],
+                    'timespan': "%s - %s" % (int(np.min(data_filtered['TimePeriod'])), int(np.max(data_filtered['TimePeriod']))),
+                    'coverage': None,
+                    'display': None,
+                    'original_metadata': None  
                 }
                 variables = variables.append(variable, ignore_index=True)
                 extract_datapoints(table).to_csv(os.path.join('datapoints','datapoints_%d.csv' % variable_idx), index=False)
@@ -153,94 +190,6 @@ def create_distinct_entities():
     df_distinct_entities = pd.DataFrame(get_distinct_entities(), columns=['name']) # Goes through each datapoints to get the distinct entities
     df_distinct_entities.to_csv(os.path.join(DATA_PATH, 'distinct_countries_standardized.csv'), index=False)
 
-#### Helper functions: 
-
-## Not sure how well this works when the list is longer than one
-def delete_output(keep_paths: List[str]) -> None:
-    for path in keep_paths:
-        if os.path.exists(os.path.join(DATA_PATH, path)):
-            for CleanUp in glob.glob(os.path.join(DATA_PATH, '*.*')):
-                if not CleanUp.endswith(path):    
-                    os.remove(CleanUp)
-
-@functools.lru_cache(maxsize=256)
-def get_series_with_relevant_dimensions(data_filtered,indicator, series, DIMENSIONS, NON_DIMENSIONS):
-    """ For a given indicator and series, return a tuple:
-    
-      - data filtered to that indicator and series
-      - names of relevant dimensions
-      - unique values for each relevant dimension
-    """
-   # data_filtered = original_df[(original_df.Indicator == indicator) & (original_df.SeriesCode == series)]
-    non_null_dimensions_columns = [col for col in DIMENSIONS if data_filtered.loc[:, col].notna().any()]
-    dimension_names = []
-    dimension_unique_values = []
-    
-    for c in non_null_dimensions_columns:
-        print(non_null_dimensions_columns)
-        uniques = data_filtered[c].unique()
-        if len(uniques) > 1: # Means that columns where the value doesn't change aren't included e.g. Nature is typically consistent across a dimension whereas Age and Sex are less likely to be. 
-            dimension_names.append(c)
-            dimension_unique_values.append(list(uniques))
-    return (data_filtered[data_filtered.columns.intersection(list(NON_DIMENSIONS)+ list(dimension_names))], dimension_names, dimension_unique_values)
-
-@functools.lru_cache(maxsize=256)
-def generate_tables_for_indicator_and_series(data_filtered, indicator, series, DIMENSIONS, NON_DIMENSIONS):
-    tables_by_combination = {}
-    data_filtered, dimensions, dimension_values = get_series_with_relevant_dimensions(data_filtered, indicator, series, DIMENSIONS, NON_DIMENSIONS)
-    if len(dimensions) == 0:
-        # no additional dimensions
-        export = data_filtered
-        return export
-    else:
-        for dimension_value_combination in itertools.product(*dimension_values):
-            # build filter by reducing, start with a constant True boolean array
-            filt = [True] * len(data_filtered)
-            for dim_idx, dim_value in enumerate(dimension_value_combination):
-                dimension_name = dimensions[dim_idx]
-                value_is_nan = type(dim_value) == float and math.isnan(dim_value)
-                filt = filt & (data_filtered[dimension_name].isnull() if value_is_nan else data_filtered[dimension_name] == dim_value)
-            tables_by_combination[dimension_value_combination] = data_filtered[filt].drop(dimensions, axis=1)   
-    return tables_by_combination
-
-def extract_datapoints(df):
-    return pd.DataFrame({
-        'country': df['country'],
-        'year': df['TimePeriod'],
-        'value': df['Value']
-    }).drop_duplicates(subset=['country', 'year']).dropna()
-
-
-def get_distinct_entities() -> List[str]:
-    """retrieves a list of all distinct entities that contain at least
-    on non-null data point that was saved to disk from the
-    `clean_and_create_datapoints()` method.
-    Returns:
-        entities: List[str]. List of distinct entity names.
-    """
-    fnames = [fname for fname in os.listdir(os.path.join(DATA_PATH, 'datapoints')) if fname.endswith('.csv')]
-    entities = set({})
-    for fname in fnames:
-        df_temp = pd.read_csv(os.path.join(DATA_PATH, 'datapoints', fname))
-        entities.update(df_temp['country'].unique().tolist())
-    
-    entities = list(entities)
-    assert pd.notnull(entities).all(), (
-        "All entities should be non-null. Something went wrong in "
-        "`clean_and_create_datapoints()`."
-    )
-    return entities
-
-def clean_datasets() -> pd.DataFrame:
-    """Constructs a dataframe where each row represents a dataset to be
-    upserted.
-    Note: often, this dataframe will only consist of a single row.
-    """
-    data = [
-        {"id": 0, "name": f"{DATASET_NAME} - {DATASET_AUTHORS} ({DATASET_VERSION})"}
-    ]
-    df = pd.DataFrame(data)
-    return df
 
 
 KEEP_PATHS = ['standardized_entity_names.csv']
