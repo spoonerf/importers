@@ -12,6 +12,7 @@ import pdfminer.high_level
 import pdfminer.layout
 import lxml.html
 import numpy as np
+import re
 
 from pathlib import Path
 from tqdm import tqdm
@@ -23,15 +24,20 @@ from utils import str_to_float, extract_description
 from un_sdg import (
     INFILE,
     ENTFILE,
-    DATA_PATH,
+    DATA_PATH
+)
+
+from un_sdg.core import (
+    create_short_unit,
     delete_output,
-    get_series_with_relevant_dimensions,
-    generate_tables_for_indicator_and_series,
     extract_datapoints,
     get_distinct_entities,
     clean_datasets,
     dimensions_description,
-    attributes_description
+    attributes_description,
+    create_short_unit,
+    get_series_with_relevant_dimensions,
+    generate_tables_for_indicator_and_series
 )
 
 """
@@ -50,7 +56,6 @@ Now use the country standardiser tool to standardise $ENTFILE
 7. Replace {outfpath} with the downloaded CSV;
 8. Rename the "Country" column to "country_code".
 """
-
 
 def load_and_clean():
     # Load and clean the data 
@@ -84,7 +89,6 @@ def create_sources(original_df, df_datasets):
         'retrievedDate': datetime.now().strftime("%d-%B-%y"),
         'additionalInfo': None
     }
-    #all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', '[Units]'])   .count()   .reset_index()
     all_series = original_df[['SeriesCode', 'SeriesDescription', '[Units]']]   .groupby(by=['SeriesCode', 'SeriesDescription', '[Units]'])   .count()   .reset_index()
     source_description = source_description_template.copy()
     for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
@@ -109,6 +113,12 @@ def create_sources(original_df, df_datasets):
 def create_variables_datapoints(original_df):
     variable_idx = 0
     variables = pd.DataFrame(columns=['id', 'name', 'unit', 'dataset_id', 'source_id'])
+    
+    new_columns = [] 
+    for k in original_df.columns:
+        new_columns.append(re.sub(r"[\[\]]", '',k))
+
+    original_df.columns = new_columns
 
     entity2owid_name = pd.read_csv(os.path.join(DATA_PATH, 'standardized_entity_names.csv')) \
                               .set_index('country_code') \
@@ -120,29 +130,27 @@ def create_variables_datapoints(original_df):
                             .set_index('series_code')\
                             .squeeze() \
                             .to_dict()
-
+ 
     unit_description = attributes_description()
 
+    dim_description = dimensions_description()
+
     original_df['country'] = original_df['GeoAreaName'].apply(lambda x: entity2owid_name[x])
-    original_df['Units'] = original_df['[Units]'].apply(lambda x: unit_description[x])
-    DIMENSIONS = tuple([c for c in original_df.columns if c[0] == '[' and c[-1] == ']'])
+    original_df['Units_long'] = original_df['Units'].apply(lambda x: unit_description[x])
+
+    DIMENSIONS = tuple(dim_description.id.unique())
     NON_DIMENSIONS = tuple([c for c in original_df.columns if c not in set(DIMENSIONS)])# not sure if units should be in here
-    all_series = original_df[['Indicator', 'SeriesCode', 'Source','SeriesDescription', 'Units']]   .groupby(by=['Indicator', 'SeriesCode', 'Source','SeriesDescription', 'Units'])   .count()   .reset_index()
-    conditions = [
-        (all_series['Units'].str.contains("PERCENT")) | (all_series['Units'].str.contains("Percentage")),
-        (all_series['Units'].str.contains("KG")) | (all_series['Units'].str.contains("Kilograms")),
-        (all_series['Units'].str.contains("USD")) | (all_series['Units'].str.contains("usd"))]   
     
-    choices = ["%", "kg", "$"]
-    
-    all_series['short_unit'] = np.select(conditions, choices, default = None)
+    all_series = original_df[['Indicator', 'SeriesCode', 'SeriesDescription', 'Units_long']]   .groupby(by=['Indicator', 'SeriesCode', 'SeriesDescription', 'Units_long'])   .count()   .reset_index()
+    all_series = create_short_unit(all_series)
 
     for i, row in tqdm(all_series.iterrows(), total=len(all_series)): 
-        data_filtered =  original_df[(original_df.Indicator == row['Indicator']) & (original_df.SeriesCode == row['SeriesCode'])]
-        _, dimensions, dimension_members = get_series_with_relevant_dimensions(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
+        data_filtered =  pd.DataFrame(original_df[(original_df.Indicator == row['Indicator']) & (original_df.SeriesCode == row['SeriesCode'])])
+        _, dimensions, dimension_members = get_series_with_relevant_dimensions(data_filtered, DIMENSIONS, NON_DIMENSIONS)
+        print(i)
         if len(dimensions) == 0:
             # no additional dimensions
-            table = generate_tables_for_indicator_and_series(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS)
+            table = generate_tables_for_indicator_and_series(data_filtered, DIMENSIONS, NON_DIMENSIONS)
             variable = {
                 'dataset_id': 0,
                 'source_id': series2source_id[row['SeriesCode']],
@@ -150,7 +158,7 @@ def create_variables_datapoints(original_df):
                 'name': "%s - %s - %s" % (row['Indicator'], row['SeriesDescription'], row['SeriesCode']),
                 'description': None,
                 'code': row['SeriesCode'],
-                'unit': row['Units'],
+                'unit': row['Units_long'],
                 'short_unit': row['short_unit'],
                 'timespan': "%s - %s" % (int(np.min(data_filtered['TimePeriod'])), int(np.max(data_filtered['TimePeriod']))),
                 'coverage': None,
@@ -158,11 +166,11 @@ def create_variables_datapoints(original_df):
                 'original_metadata': None
             }
             variables = variables.append(variable, ignore_index=True)
-            extract_datapoints(table).to_csv(os.path.join('datapoints','datapoints_%d.csv' % variable_idx), index=False)
+            extract_datapoints(table).to_csv(os.path.join(DATA_PATH,'datapoints','datapoints_%d.csv' % variable_idx), index=False)
             variable_idx += 1
         else:
         # has additional dimensions
-            for member_combination, table in generate_tables_for_indicator_and_series(data_filtered, row['Indicator'], row['SeriesCode'], DIMENSIONS, NON_DIMENSIONS).items():
+            for member_combination, table in generate_tables_for_indicator_and_series(data_filtered, DIMENSIONS, NON_DIMENSIONS).items():
                 variable = {
                     'dataset_id': 0,
                     'source_id': series2source_id[row['SeriesCode']],
@@ -174,22 +182,23 @@ def create_variables_datapoints(original_df):
                         ' - '.join(map(str, member_combination))),
                     'description': None,
                     'code': row['SeriesCode'],
-                    'unit': row['Units'],
+                    'unit': row['Units_long'],
                     'short_unit': row['short_unit'],
                     'timespan': "%s - %s" % (int(np.min(data_filtered['TimePeriod'])), int(np.max(data_filtered['TimePeriod']))),
                     'coverage': None,
                     'display': None,
                     'original_metadata': None  
                 }
+                print(member_combination)
                 variables = variables.append(variable, ignore_index=True)
-                extract_datapoints(table).to_csv(os.path.join('datapoints','datapoints_%d.csv' % variable_idx), index=False)
+                extract_datapoints(table).to_csv(os.path.join(DATA_PATH,'datapoints','datapoints_%d.csv' % variable_idx), index=False)
                 variable_idx += 1
+                print(table)
     variables.to_csv(os.path.join(DATA_PATH,'variables.csv'), index=False)
 
 def create_distinct_entities(): 
     df_distinct_entities = pd.DataFrame(get_distinct_entities(), columns=['name']) # Goes through each datapoints to get the distinct entities
     df_distinct_entities.to_csv(os.path.join(DATA_PATH, 'distinct_countries_standardized.csv'), index=False)
-
 
 
 KEEP_PATHS = ['standardized_entity_names.csv']
