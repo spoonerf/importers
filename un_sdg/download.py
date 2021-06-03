@@ -11,8 +11,18 @@ from un_sdg import INFILE, METAPATH, METADATA_LOC
 base_url = "https://unstats.un.org/sdgapi"
 
 def main():
+    delete_output()
     download_data()
     download_metadata()
+
+
+## Not sure how well this works when the list is longer than one
+def delete_output(keep_paths: List[str]) -> None:
+    for path in keep_paths:
+        if os.path.exists(os.path.join(DATA_PATH, path)):
+            for CleanUp in glob.glob(os.path.join(DATA_PATH, '*.*')):
+                if not CleanUp.endswith(path):    
+                    os.remove(CleanUp)              
 
 def download_data() -> None:
     # retrieves all goal codes

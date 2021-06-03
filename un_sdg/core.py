@@ -1,15 +1,18 @@
 import os
 import pandas as pd
-import os
 import glob
 import json
 import itertools
 import math
 import numpy as np
 import requests
+import pdfminer
+import io
 
 from typing import List
 from datetime import datetime
+
+from un_sdg import DATASET_NAME, DATASET_AUTHORS, DATA_PATH, DATASET_VERSION
 
 ## Not sure how well this works when the list is longer than one
 def delete_output(keep_paths: List[str]) -> None:
@@ -18,6 +21,31 @@ def delete_output(keep_paths: List[str]) -> None:
             for CleanUp in glob.glob(os.path.join(DATA_PATH, '*.*')):
                 if not CleanUp.endswith(path):    
                     os.remove(CleanUp)              
+
+def str_to_float(s):
+    try:
+        # Parse strings with thousands (,) separators
+        return float(s.replace(',','')) if type(s) == str else s
+    except ValueError:
+        return None
+
+def extract_description(pdf_path):
+    laparams = pdfminer.layout.LAParams()
+    for param in ("all_texts", "detect_vertical", "word_margin", "char_margin", "line_margin", "boxes_flow"):
+        paramv = locals().get(param, None)
+        if paramv is not None:
+            setattr(laparams, param, paramv)
+
+    inputf = open(pdf_path, "rb")
+    ff = io.StringIO()
+    pdfminer.high_level.extract_text_to_fp(inputf, ff, laparams=laparams)
+    inputf.close()
+
+    converted_text = ff.getvalue()
+
+    return converted_text
+
+
 
 def extract_datapoints(df):
     return pd.DataFrame({
@@ -48,7 +76,7 @@ def get_distinct_entities() -> List[str]:
     return entities
 
 
-def clean_datasets() -> pd.DataFrame:
+def clean_datasets(DATASET_NAME, DATASET_AUTHORS, DATASET_VERSION) -> pd.DataFrame:
     """Constructs a dataframe where each row represents a dataset to be
     upserted.
     Note: often, this dataframe will only consist of a single row.
@@ -154,17 +182,20 @@ def get_series_with_relevant_dimensions(data_filtered,DIMENSIONS, NON_DIMENSIONS
             dimension_unique_values.append(list(uniques))
     return (data_filtered[data_filtered.columns.intersection(list(NON_DIMENSIONS)+ list(dimension_names))], dimension_names, dimension_unique_values)
 
-def generate_tables_for_indicator_and_series(data_filtered, DIMENSIONS, NON_DIMENSIONS):
-    
+def generate_tables_for_indicator_and_series(data_filtered, DIMENSIONS, NON_DIMENSIONS): 
     tables_by_combination = {}
     dim_dict = dimensions_description()    
     data_filtered, dimensions, dimension_values = get_series_with_relevant_dimensions(data_filtered, DIMENSIONS, NON_DIMENSIONS)
-    dim_desc = dim_dict.set_index('id').loc[dimensions].set_index('code').squeeze().to_dict()
-    if len(dimensions) == 0:
+    print("PRINTING DIMENSIONS ",dimensions)
+    print("INDICATOR", data_filtered.Indicator[0:1])
+    print("SERIES_CODE", data_filtered.SeriesCode[0:1])
+    if (len(dimensions) == 0 )|(data_filtered[dimensions].isna().sum().sum() > 0): # not the best solution.
         # no additional dimensions
         export = data_filtered
         return export
     else:
+        dim_desc = dim_dict.set_index('id').loc[dimensions].set_index('code').squeeze().to_dict()
+       #dimension_values[0] = [x for x in dimension_values[0] if x == x] # some cases where there are NaNs in the dimensions_values
         i = 0
         for i in range(len(dimension_values)): 
             dimension_values[i] = [dim_desc[k] for k in dimension_values[i]]
@@ -182,4 +213,10 @@ def generate_tables_for_indicator_and_series(data_filtered, DIMENSIONS, NON_DIME
                 filt = filt & (data_filtered[dimension_name].isnull() if value_is_nan else data_filtered[dimension_name] == dim_value)
                 tables_by_combination[dimension_value_combination] = data_filtered[filt].drop(dimensions, axis=1)
     return tables_by_combination
-     
+
+
+#data_filtered =  pd.DataFrame(original_df[(original_df.Indicator == '10.c.1') & (original_df.SeriesCode == 'SI_RMT_COST_BC')])
+
+#data_filtered =  pd.DataFrame(original_df[(original_df.Indicator == '1.1.1') & (original_df.SeriesCode == 'SI_POV_EMP1')])
+
+#generate_tables_for_indicator_and_series(data_filtered, DIMENSIONS, NON_DIMENSIONS)

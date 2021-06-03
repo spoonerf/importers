@@ -17,14 +17,16 @@ import re
 from pathlib import Path
 from tqdm import tqdm
 from typing import List, Tuple, Dict
-from utils import str_to_float, extract_description
 
 #from db import connection
 #from db_utils import DBUtils
 from un_sdg import (
     INFILE,
     ENTFILE,
-    DATA_PATH
+    DATA_PATH,
+    DATASET_NAME,
+    DATASET_AUTHORS,
+    DATASET_VERSION
 )
 
 from un_sdg.core import (
@@ -37,7 +39,9 @@ from un_sdg.core import (
     attributes_description,
     create_short_unit,
     get_series_with_relevant_dimensions,
-    generate_tables_for_indicator_and_series
+    generate_tables_for_indicator_and_series,
+    str_to_float, 
+    extract_description
 )
 
 """
@@ -69,11 +73,13 @@ def load_and_clean():
                                 .dropna() \
                                 .rename(columns={'GeoAreaName': 'Country'}) \
                                 .to_csv(ENTFILE, index=False)
+    # Make the datapoints folder
+    Path('datapoints').mkdir(parents=True, exist_ok=True)
     return original_df
 
 ### Datasets
 def create_datasets():
-    df_datasets = clean_datasets()
+    df_datasets = clean_datasets(DATASET_NAME, DATASET_AUTHORS, DATASET_VERSION)
     assert df_datasets.shape[0] == 1, f"Only expected one dataset in {os.path.join(DATA_PATH, 'datasets.csv')}."
     df_datasets.to_csv(os.path.join(DATA_PATH, 'datasets.csv'), index=False)
     return df_datasets
@@ -148,7 +154,7 @@ def create_variables_datapoints(original_df):
         data_filtered =  pd.DataFrame(original_df[(original_df.Indicator == row['Indicator']) & (original_df.SeriesCode == row['SeriesCode'])])
         _, dimensions, dimension_members = get_series_with_relevant_dimensions(data_filtered, DIMENSIONS, NON_DIMENSIONS)
         print(i)
-        if len(dimensions) == 0:
+        if len(dimensions) == 0|(data_filtered[dimensions].isna().sum().sum() > 0):
             # no additional dimensions
             table = generate_tables_for_indicator_and_series(data_filtered, DIMENSIONS, NON_DIMENSIONS)
             variable = {
@@ -202,13 +208,11 @@ def create_distinct_entities():
 
 
 KEEP_PATHS = ['standardized_entity_names.csv']
-#delete_output(KEEP_PATHS)
+delete_output(KEEP_PATHS)
 
 # Max length of source name.
 MAX_SOURCE_NAME_LEN = 256
 
-# Make the datapoints folder
-Path('datapoints').mkdir(parents=True, exist_ok=True)
 
 def main():
     original_df = load_and_clean() 
