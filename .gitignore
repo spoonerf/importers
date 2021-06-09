@@ -5,9 +5,7 @@ __pycache__/
 .ipynb_checkpoints/
 .vscode/settings.json
 
-/un_sdg/input/
-/un_sdg/output/
-/un_sdg/output/datapoints/
+/venv/
 .vscode/launch.json
 .Rproj.user
 *.Rproj
