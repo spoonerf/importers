@@ -7,6 +7,7 @@ import os
 import zipfile
 from io import BytesIO
 from un_sdg import INFILE, METAPATH, METADATA_LOC
+from typing import List
 
 base_url = "https://unstats.un.org/sdgapi"
 

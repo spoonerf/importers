@@ -31,7 +31,6 @@ from un_sdg import (
 
 from un_sdg.core import (
     create_short_unit,
-    delete_output,
     extract_datapoints,
     get_distinct_entities,
     clean_datasets,
@@ -74,7 +73,7 @@ def load_and_clean():
                                 .rename(columns={'GeoAreaName': 'Country'}) \
                                 .to_csv(ENTFILE, index=False)
     # Make the datapoints folder
-    Path('datapoints').mkdir(parents=True, exist_ok=True)
+    Path(DATA_PATH, 'datapoints').mkdir(parents=True, exist_ok=True)
     return original_df
 
 ### Datasets
@@ -207,8 +206,7 @@ def create_distinct_entities():
     df_distinct_entities.to_csv(os.path.join(DATA_PATH, 'distinct_countries_standardized.csv'), index=False)
 
 
-KEEP_PATHS = ['standardized_entity_names.csv']
-delete_output(KEEP_PATHS)
+
 
 # Max length of source name.
 MAX_SOURCE_NAME_LEN = 256

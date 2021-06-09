@@ -14,13 +14,7 @@ from datetime import datetime
 
 from un_sdg import DATASET_NAME, DATASET_AUTHORS, DATA_PATH, DATASET_VERSION
 
-## Not sure how well this works when the list is longer than one
-def delete_output(keep_paths: List[str]) -> None:
-    for path in keep_paths:
-        if os.path.exists(os.path.join(DATA_PATH, path)):
-            for CleanUp in glob.glob(os.path.join(DATA_PATH, '*.*')):
-                if not CleanUp.endswith(path):    
-                    os.remove(CleanUp)              
+
 
 def str_to_float(s):
     try:
@@ -206,17 +200,9 @@ def generate_tables_for_indicator_and_series(data_filtered, DIMENSIONS, NON_DIME
             # build filter by reducing, start with a constant True boolean array
             filt = [True] * len(data_filtered)
             for dim_idx, dim_value in enumerate(dimension_value_combination):
-                print(dim_idx)
-                print(dimension_value_combination)
                 dimension_name = dimensions[dim_idx]
                 value_is_nan = type(dim_value) == float and math.isnan(dim_value)
                 filt = filt & (data_filtered[dimension_name].isnull() if value_is_nan else data_filtered[dimension_name] == dim_value)
                 tables_by_combination[dimension_value_combination] = data_filtered[filt].drop(dimensions, axis=1)
+                tables_by_combination = {k:v for (k,v) in tables_by_combination.items() if not v.empty} #removing empty combinations
     return tables_by_combination
-
-
-#data_filtered =  pd.DataFrame(original_df[(original_df.Indicator == '10.c.1') & (original_df.SeriesCode == 'SI_RMT_COST_BC')])
-
-#data_filtered =  pd.DataFrame(original_df[(original_df.Indicator == '1.1.1') & (original_df.SeriesCode == 'SI_POV_EMP1')])
-
-#generate_tables_for_indicator_and_series(data_filtered, DIMENSIONS, NON_DIMENSIONS)
