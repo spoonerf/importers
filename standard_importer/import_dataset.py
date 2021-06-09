@@ -25,17 +25,18 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-DATASET_DIR = "who_gho"
-DATASET_VERSION = import_from(DATASET_DIR, 'DATASET_VERSION')
+## We should include these in __init__.py
+#DATASET_DIR = "who_gho"
+#DATASET_VERSION = import_from(DATASET_DIR, 'DATASET_VERSION')
 
-USER_ID = 46
+#USER_ID = 46
 
-CURRENT_DIR = os.path.dirname(__file__)
+#CURRENT_DIR = os.path.dirname(__file__)
 # CURRENT_DIR = os.path.join(os.getcwd(), 'standard_importer')
-DATA_PATH = os.path.join(CURRENT_DIR, f"../{DATASET_DIR}/output/")
+#DATA_PATH = os.path.join(CURRENT_DIR, f"../{DATASET_DIR}/output/")
 
 
-def main():
+def main(DATASET_DIR, DATA_PATH, DATASET_VERSION, USER_ID):
 
     with connection.cursor() as cursor:
         db = DBUtils(cursor)
@@ -49,7 +50,7 @@ def main():
             entities.loc[entities.name == entity_name, "db_entity_id"] = db_entity_id
         print(f"Upserted {len(entities)} entities.")
 
-
+    
         # Upsert datasets
         print("---\nUpserting datasets...")
         datasets = pd.read_csv(os.path.join(DATA_PATH, "datasets.csv"))
@@ -62,6 +63,7 @@ def main():
             datasets.at[i, "db_dataset_id"] = db_dataset_id
         print(f"Upserted {len(datasets)} datasets.")
 
+    
 
         # Upsert sources
         print("---\nUpserting sources...")
@@ -75,7 +77,6 @@ def main():
             )
             sources.at[i, "db_source_id"] = db_source_id
         print(f"Upserted {len(sources)} sources.")
-
 
         # Upsert variables
         print("---\nUpserting variables...")
@@ -112,7 +113,7 @@ def main():
             variables.at[i, "db_variable_id"] = db_variable_id
         print(f"Upserted {len(variables)} variables.")
 
-
+        
         # Upserting datapoints
         print("---\nUpserting datapoints...")
         datapoint_files = glob(os.path.join(DATA_PATH, "datapoints/datapoints_*.csv"))
@@ -146,3 +147,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
