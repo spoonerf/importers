@@ -94,13 +94,18 @@ def create_sources(original_df, df_datasets):
         'retrievedDate': datetime.now().strftime("%d-%B-%y"),
         'additionalInfo': None
     }
+    #all_series = original_df[['SeriesCode', 'SeriesDescription', '[Units]']]   .groupby(by=['SeriesCode', 'SeriesDescription', '[Units]'])   .count()   .reset_index()
     all_series = original_df[['SeriesCode', 'SeriesDescription', '[Units]']]   .groupby(by=['SeriesCode', 'SeriesDescription', '[Units]'])   .count()   .reset_index()
     source_description = source_description_template.copy()
     for i, row in tqdm(all_series.iterrows(), total=len(all_series)):
-   # print(row['Indicator'])   
+        dp_source = original_df[original_df.SeriesCode == row['SeriesCode']].Source.drop_duplicates()
+        if len(dp_source) <= 2:
+            source_description['dataPublisherSource'] = dp_source.str.cat(sep='; ')
+        else: 
+            source_description['dataPublisherSource'] = 'Data from multiple sources compiled by UN Global SDG Database - https://unstats.un.org/sdgs/indicators/database/'    
+        print(source_description['dataPublisherSource'])   
         try:
             source_description['additionalInfo'] = None
-            print(source_description['additionalInfo'])
         except:
             pass
         df_sources = df_sources.append({
