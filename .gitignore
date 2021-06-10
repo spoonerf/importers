@@ -19,3 +19,4 @@ povcal/output/
 .vscode/launch.json
 .Rproj.user
 *.Rproj
+*.Rhistory
